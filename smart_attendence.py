@@ -1,5 +1,3 @@
-# smart_attendence.py
-
 import cv2
 import numpy as np
 import face_recognition as face_rec
@@ -12,18 +10,19 @@ def resize(img, size):
     dimension = (width, height)
     return cv2.resize(img, dimension, interpolation=cv2.INTER_AREA)
 
-def load_student_images(path):
-    studentimg = []
-    studentNames = []
-    myList = os.listdir(path)
-    for cl in myList:
-        currImg = cv2.imread(os.path.join(path, cl))
-        if currImg is not None:
-            studentimg.append(currImg)
-            studentNames.append(os.path.splitext(cl)[0])
-        else:
-            print(f"Error loading image {cl}")
-    return studentimg, studentNames
+path = r"C:\Documents\Smart Attendence System\student_images"
+studentimg = []
+studentNames = []
+
+myList = os.listdir(path)
+
+for cl in myList:
+    currImg = cv2.imread(os.path.join(path, cl))
+    if currImg is not None:
+        studentimg.append(currImg)
+        studentNames.append(os.path.splitext(cl)[0])
+    else:
+        print(f"Error loading image {cl}")
 
 def finEncoding(images):
     imgEncodings = []
@@ -38,13 +37,15 @@ def finEncoding(images):
             print("No face found in the image")
     return imgEncodings
 
-attendance_time_limit = timedelta(minutes=120)
+attendance_time_limit = timedelta(minutes=1)
 last_attendance_time = {}
+
+# Set to keep track of processed names in the current session
 processed_names = set()
 
-def mark_attendance(name):
+def MarkAttendance(name):
     if name in processed_names:
-        return False, f"Attendance for {name} is already marked in this session."
+        return  # Skip if the name has already been processed in this session
     
     processed_names.add(name)
     current_time = datetime.now()
@@ -60,14 +61,24 @@ def mark_attendance(name):
                     recorded_name, recorded_date, recorded_time = data
                     recorded_datetime = datetime.strptime(f'{recorded_date} {recorded_time}', '%Y-%m-%d %H:%M:%S')
                     if name == recorded_name and (current_time - recorded_datetime) < timedelta(hours=24):
-                        return False, f"Attendance for {name} is already marked within the last 24 hours."
+                        print(f'Attendance for {name} is already marked within the last 24 hours.')
+                        return
     
     with open('attendance.csv', 'a') as f:
         f.write(f'{name},{date_str},{time_str}\n')
-    return True, f"Attendance marked for {name} on {date_str} at {time_str}"
+        print(f'Attendance marked for {name} on {date_str} at {time_str}')
 
-def process_frame(frame, encode_list, studentNames):
+encode_list = finEncoding(studentimg)
+
+vid = cv2.VideoCapture(0)
+
+while True:
+    success, frame = vid.read()
+    if not success:
+        break
+    
     smaller_frames = cv2.resize(frame, (0, 0), None, 0.25, 0.25)
+    
     faces_in_frame = face_rec.face_locations(smaller_frames)
     encodeFacesInFrame = face_rec.face_encodings(smaller_frames, faces_in_frame)
     
@@ -83,5 +94,12 @@ def process_frame(frame, encode_list, studentNames):
             cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 3)
             cv2.rectangle(frame, (x1, y2 - 25), (x2, y2), (0, 255, 0), cv2.FILLED)
             cv2.putText(frame, name, (x1 + 6, y2 - 6), cv2.FONT_HERSHEY_COMPLEX, 1, (255, 255, 255), 2)
-            return frame, name
-    return frame, None
+            MarkAttendance(name)
+    
+    cv2.imshow('Webcam', frame)
+    
+    if cv2.waitKey(1) & 0xFF == ord('q'):
+        break
+
+vid.release()
+cv2.destroyAllWindows()
